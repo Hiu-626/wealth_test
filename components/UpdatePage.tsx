@@ -8,7 +8,7 @@ import {
 import { parseFinancialStatement, ScannedAsset } from '../services/geminiService';
 import Confetti from './Confetti';
 
-const GOOGLE_SCRIPT_URL = 'https://script.google.com/macros/s/AKfycbwcew_uZTf1VM66NSub7n5oF4MxTQDk2kqAe39HSdJ7f2fs5x-6OCxrNNk1XhYqdZ97HA/exec';
+const GOOGLE_SCRIPT_URL = 'https://script.google.com/macros/s/AKfycbzxghw8YJtPrE8ft8eGpaZGiHk9K41CkOnKBWxGrfLwHdjwU72ADWuu7cItPFg-FSdhxg/exec';
 
 interface UpdatePageProps {
   accounts: Account[];
