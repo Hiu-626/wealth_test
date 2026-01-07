@@ -39,8 +39,8 @@
     <div id="root"></div>
 
     <script type="module">
-      // 修正點 1: 統一使用 https://esm.sh/ 直接匯入，確保版本與依賴一致
-      import { initializeApp } from "https://esm.sh/firebase@10.8.0/app";
+      // 建議: 統一從相同的來源載入，確保底層實例互通
+      import { initializeApp, getApp, getApps } from "https://esm.sh/firebase@10.8.0/app";
       import { getDatabase, ref, onValue } from "https://esm.sh/firebase@10.8.0/database";
 
       const firebaseConfig = {
@@ -55,19 +55,20 @@
       };
 
       try {
-        const app = initializeApp(firebaseConfig);
+        // 加固邏輯：檢查是否已經初始化過，避免重複初始化導致報錯
+        const app = !getApps().length ? initializeApp(firebaseConfig) : getApp();
         
-        // 修正點 2: 強制在 getDatabase 中傳入 databaseURL
-        // 這能 100% 解決 "Service database is not available" 的報錯
+        // 核心修正：手動指定資料庫 URL 以避開 "Service not available"
         const db = getDatabase(app, firebaseConfig.databaseURL);
 
+        // 掛載到全域變數，供 index.tsx 使用
         window.firebaseDB = db;
         window.firebaseRef = ref;
         window.firebaseOnValue = onValue;
 
-        console.log("✅ WealthSnapshot: Firebase Sync 模組已就緒 (DB: Singapore)");
+        console.log("✅ WealthSnapshot: Firebase Sync 模組已就緒 (Location: Singapore)");
       } catch (e) {
-        console.error("❌ Firebase 初始化失敗:", e);
+        console.error("❌ Firebase 初始化失敗，詳細資訊:", e);
       }
     </script>
 
