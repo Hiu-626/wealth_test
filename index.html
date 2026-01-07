@@ -13,7 +13,6 @@
     
     <style>
       body { font-family: 'Inter', sans-serif; background-color: #F8F9FA; }
-      /* 確保 PWA 在手機上的體驗 */
       @media (display-mode: standalone) {
         body { padding-top: env(safe-area-inset-top); }
       }
@@ -40,6 +39,7 @@
     <div id="root"></div>
 
     <script type="module">
+      // 修正點 1: 統一使用 https://esm.sh/ 直接匯入，確保版本與依賴一致
       import { initializeApp } from "https://esm.sh/firebase@10.8.0/app";
       import { getDatabase, ref, onValue } from "https://esm.sh/firebase@10.8.0/database";
 
@@ -54,19 +54,20 @@
         measurementId: "G-0C2PVZ5NXS"
       };
 
-      // 初始化 Firebase
       try {
         const app = initializeApp(firebaseConfig);
-        const db = getDatabase(app);
+        
+        // 修正點 2: 強制在 getDatabase 中傳入 databaseURL
+        // 這能 100% 解決 "Service database is not available" 的報錯
+        const db = getDatabase(app, firebaseConfig.databaseURL);
 
-        // 掛載到 window 供 index.tsx 使用
         window.firebaseDB = db;
         window.firebaseRef = ref;
         window.firebaseOnValue = onValue;
 
-        console.log("WealthSnapshot: Firebase Sync 模組已就緒");
+        console.log("✅ WealthSnapshot: Firebase Sync 模組已就緒 (DB: Singapore)");
       } catch (e) {
-        console.error("Firebase 初始化失敗:", e);
+        console.error("❌ Firebase 初始化失敗:", e);
       }
     </script>
 

@@ -3,7 +3,6 @@ import ReactDOM from 'react-dom/client';
 import App from './App';
 
 // --- 1. 定義 Firebase 資料的 Context ---
-// 這樣你的 App 內任何地方都能存取同步數據
 export const SyncContext = createContext<{
   data: any;
   userPwd: string | null;
@@ -15,23 +14,47 @@ const RootProvider = ({ children }: { children: React.ReactNode }) => {
   const [userPwd, setUserPwd] = useState<string | null>(localStorage.getItem('wealth_pwd'));
 
   useEffect(() => {
-    // 檢查 window 是否已載入 HTML 中定義的 Firebase 工具
-    const { firebaseDB, firebaseRef, firebaseOnValue } = window as any;
+    let unsubscribe: (() => void) | null = null;
+    let retryTimer: number | null = null;
 
-    if (userPwd && firebaseDB && firebaseOnValue) {
-      // 監聽路徑：users/你的密碼/current_status
-      const statusRef = firebaseRef(firebaseDB, `users/${userPwd}/current_status`);
-      
-      const unsubscribe = firebaseOnValue(statusRef, (snapshot: any) => {
-        const val = snapshot.val();
-        if (val) {
-          console.log("Firebase 同步成功:", val);
-          setData(val);
+    const setupSync = () => {
+      // 從 window 取得 HTML 注入的實例
+      const { firebaseDB, firebaseRef, firebaseOnValue } = window as any;
+
+      // 檢查 Firebase 是否真的準備好了
+      if (userPwd && firebaseDB && firebaseOnValue && firebaseRef) {
+        try {
+          const statusRef = firebaseRef(firebaseDB, `users/${userPwd}/current_status`);
+          
+          unsubscribe = firebaseOnValue(statusRef, (snapshot: any) => {
+            const val = snapshot.val();
+            if (val) {
+              console.log("✅ Firebase 同步成功，收到數據:", val);
+              setData(val);
+            }
+          });
+          
+          if (retryTimer) clearInterval(retryTimer);
+          console.log("📡 監聽器已掛載至路徑:", `users/${userPwd}/current_status`);
+        } catch (err) {
+          console.error("❌ 設置監聽器時發生錯誤:", err);
         }
-      });
+      } else {
+        // 如果 Firebase 還沒準備好，每 500ms 檢查一次 (最多重試，直到成功)
+        if (!retryTimer) {
+          console.warn("⏳ Firebase 尚未就緒，正在等待初始化...");
+          retryTimer = window.setInterval(setupSync, 500);
+        }
+      }
+    };
 
-      return () => unsubscribe(); // 組件卸載時停止監聽
-    }
+    setupSync();
+
+    // 清理函數：卸載時清除監聽器和定時器
+    return () => {
+      if (unsubscribe) unsubscribe();
+      if (retryTimer) clearInterval(retryTimer);
+    };
   }, [userPwd]);
 
   const setPwd = (pwd: string) => {
@@ -49,14 +72,4 @@ const RootProvider = ({ children }: { children: React.ReactNode }) => {
 // --- 2. 標準 React 19 掛載 (保持原樣且不簡化) ---
 const rootElement = document.getElementById('root');
 if (!rootElement) {
-  throw new Error("Could not find root element to mount to");
-}
-
-const root = ReactDOM.createRoot(rootElement);
-root.render(
-  <React.StrictMode>
-    <RootProvider>
-      <App />
-    </RootProvider>
-  </React.StrictMode>
-);
+  throw new Error("
