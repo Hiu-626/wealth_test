@@ -41,7 +41,7 @@
     <script type="module">
       // 建議: 統一從相同的來源載入，確保底層實例互通
       import { initializeApp, getApp, getApps } from "https://esm.sh/firebase@10.8.0/app";
-      import { getDatabase, ref, onValue } from "https://esm.sh/firebase@10.8.0/database";
+      import { getDatabase, ref, onValue, set } from "https://esm.sh/firebase@10.8.0/database";
 
       const firebaseConfig = {
         apiKey: "AIzaSyCNA78fMaTHLgsEXXlwcP69adYkJHiRIto",
@@ -65,6 +65,7 @@
         window.firebaseDB = db;
         window.firebaseRef = ref;
         window.firebaseOnValue = onValue;
+        window.firebaseSet = set; // 新增：開放寫入權限
 
         console.log("✅ WealthSnapshot: Firebase Sync 模組已就緒 (Location: Singapore)");
       } catch (e) {
