@@ -4,9 +4,15 @@ import { INITIAL_DATA } from '../constants';
 const STORAGE_KEY = 'wealth_snapshot_v1';
 
 export const getStoredData = (): AppState => {
-  const stored = localStorage.getItem(STORAGE_KEY);
-  if (stored) {
-    return JSON.parse(stored);
+  try {
+    const stored = localStorage.getItem(STORAGE_KEY);
+    if (stored) {
+      return JSON.parse(stored);
+    }
+  } catch (e) {
+    console.error("Storage data corrupted, resetting to defaults...", e);
+    // Optionally clear the corrupted data to prevent future issues
+    // localStorage.removeItem(STORAGE_KEY);
   }
   
   // Initialize with defaults
@@ -18,12 +24,21 @@ export const getStoredData = (): AppState => {
     wealthGoal: 2000000 // Default goal: 2 Million HKD
   };
   
-  localStorage.setItem(STORAGE_KEY, JSON.stringify(defaults));
+  try {
+    localStorage.setItem(STORAGE_KEY, JSON.stringify(defaults));
+  } catch (e) {
+    console.error("Failed to write defaults to storage", e);
+  }
+  
   return defaults;
 };
 
 export const saveStoredData = (data: AppState) => {
-  localStorage.setItem(STORAGE_KEY, JSON.stringify(data));
+  try {
+    localStorage.setItem(STORAGE_KEY, JSON.stringify(data));
+  } catch (e) {
+    console.error("Failed to save data to storage", e);
+  }
 };
 
 export const calculateTotalWealthHKD = (accounts: Account[], fixedDeposits: FixedDeposit[]): number => {

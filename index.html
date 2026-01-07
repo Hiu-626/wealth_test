@@ -12,9 +12,17 @@
     <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;600;700&display=swap" rel="stylesheet">
     
     <style>
-      body { font-family: 'Inter', sans-serif; background-color: #F8F9FA; }
+      body { font-family: 'Inter', sans-serif; background-color: #F8F9FA; margin: 0; }
       @media (display-mode: standalone) {
         body { padding-top: env(safe-area-inset-top); }
+      }
+      /* 防止白畫面閃爍 */
+      #root:empty {
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        height: 100vh;
+        background: #F8F9FA;
       }
     </style>
 
@@ -36,12 +44,17 @@
     </script>
   </head>
   <body>
-    <div id="root"></div>
+    <div id="root">
+      <div class="flex flex-col items-center">
+        <div class="w-12 h-12 border-4 border-blue-600 border-t-transparent rounded-full animate-spin mb-4"></div>
+        <p class="text-blue-600 font-bold tracking-widest text-sm uppercase">WealthSnapshot</p>
+      </div>
+    </div>
 
     <script type="module">
-      // 建議: 統一從相同的來源載入，確保底層實例互通
-      import { initializeApp, getApp, getApps } from "https://esm.sh/firebase@10.8.0/app";
-      import { getDatabase, ref, onValue, set } from "https://esm.sh/firebase@10.8.0/database";
+      // 關鍵修正：統一使用 importmap 中定義的名稱，確保實例一致
+      import { initializeApp, getApps, getApp } from "firebase/app";
+      import { getDatabase, ref, onValue, set } from "firebase/database";
 
       const firebaseConfig = {
         apiKey: "AIzaSyCNA78fMaTHLgsEXXlwcP69adYkJHiRIto",
@@ -55,21 +68,21 @@
       };
 
       try {
-        // 加固邏輯：檢查是否已經初始化過，避免重複初始化導致報錯
+        // 1. 初始化 App
         const app = !getApps().length ? initializeApp(firebaseConfig) : getApp();
         
-        // 核心修正：手動指定資料庫 URL 以避開 "Service not available"
+        // 2. 初始化 Database (手動傳入 URL 確保連線正確)
         const db = getDatabase(app, firebaseConfig.databaseURL);
 
-        // 掛載到全域變數，供 index.tsx 使用
+        // 3. 核心掛載：這是 App.tsx 能否寫入資料與讀取資料的唯一途徑
         window.firebaseDB = db;
         window.firebaseRef = ref;
         window.firebaseOnValue = onValue;
-        window.firebaseSet = set; // 新增：開放寫入權限
+        window.firebaseSet = set;
 
-        console.log("✅ WealthSnapshot: Firebase Sync 模組已就緒 (Location: Singapore)");
+        console.log("✅ [System] Firebase Service Ready: Singapore Node");
       } catch (e) {
-        console.error("❌ Firebase 初始化失敗，詳細資訊:", e);
+        console.error("❌ [System] Firebase Init Error:", e.message);
       }
     </script>
 

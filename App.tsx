@@ -1,7 +1,7 @@
 import React, { useState, useEffect, useContext, useCallback } from 'react';
 import { AppState, ViewState, Account, FixedDeposit } from './types';
 import { getStoredData, saveStoredData, calculateTotalWealthHKD } from './services/storageService';
-import { SyncContext } from './index'; // 引入同步 Context
+import { SyncContext } from './index'; 
 import Layout from './components/Layout';
 import Overview from './components/Overview';
 import UpdatePage from './components/UpdatePage';
@@ -18,45 +18,47 @@ import {
 } from 'lucide-react';
 
 const App: React.FC = () => {
-  // 從 Context 取得 Firebase 即時數據與帳戶資訊
   const { data: cloudData, userPwd, setPwd } = useContext(SyncContext);
   
-  const [data, setData] = useState<AppState | null>(null);
+  // --- 1. 初始加載 (Lazy Initialization) ---
+  // 使用 callback 形式的 useState，確保組件掛載時立即讀取 LocalStorage
+  // 這避免了 useEffect 異步執行導致的 "Loading..." 畫面卡住問題
+  const [data, setData] = useState<AppState | null>(() => {
+    try {
+      return getStoredData();
+    } catch (e) {
+      console.error("Critical: Failed to load initial data", e);
+      return null;
+    }
+  });
+
   const [currentView, setCurrentView] = useState<ViewState>('overview');
   const [syncStatus, setSyncStatus] = useState<'synced' | 'syncing' | 'offline'>('synced');
-  const [inputPwd, setInputPwd] = useState(''); // 用於登入介面輸入
+  const [inputPwd, setInputPwd] = useState('');
 
-  // --- 1. 初始加載本地數據 ---
-  useEffect(() => {
-    const loadedData = getStoredData();
-    if (loadedData) {
-      setData(loadedData);
-    }
-  }, []);
-
-  // --- 2. 當收到雲端數據時 (Cloud -> Local)，更新本地狀態 ---
+  // --- 2. 雲端數據同步 ---
+  // 當收到新的雲端數據時，與本地數據比對時間戳，若雲端較新則覆蓋
   useEffect(() => {
     if (cloudData) {
-      // 判斷邏輯：如果本地沒數據，或雲端數據的 lastUpdated 較新，則覆蓋本地
       const isCloudNewer = !data || (
         cloudData.lastUpdated && 
         (!data.lastUpdated || new Date(cloudData.lastUpdated) > new Date(data.lastUpdated))
       );
 
+      // 嚴格比對內容差異，避免不必要的重渲染循環
       if (isCloudNewer && JSON.stringify(cloudData) !== JSON.stringify(data)) {
-        console.log("📲 偵測到更新的雲端數據，自動刷新 UI...");
+        console.log("📲 Applying cloud update...");
         setData(cloudData);
         saveStoredData(cloudData);
       }
     }
-  }, [cloudData]);
+  }, [cloudData, data]);
 
-  // --- 3. 登入介面攔截 ---
-  // 如果沒有 userPwd (localStorage 也沒存過)，顯示專為手機設計的登入框
+  // --- 3. 登入介面 ---
   if (!userPwd) {
     return (
-      <div className="min-h-screen bg-[#F8F9FA] flex flex-col items-center justify-center p-6 text-center">
-        <div className="w-20 h-20 bg-[#0052CC] rounded-[2rem] shadow-xl shadow-blue-100 flex items-center justify-center mb-8 rotate-3">
+      <div className="min-h-screen bg-[#F8F9FA] flex flex-col items-center justify-center p-6 text-center animate-in fade-in duration-500">
+        <div className="w-20 h-20 bg-[#0052CC] rounded-[2rem] shadow-xl shadow-blue-100 flex items-center justify-center mb-8 rotate-3 transition-transform hover:rotate-6">
           <Lock className="text-white w-10 h-10" />
         </div>
         <h1 className="text-3xl font-black text-gray-900 mb-2 tracking-tight">WealthSnapshot</h1>
@@ -69,11 +71,11 @@ const App: React.FC = () => {
             onChange={(e) => setInputPwd(e.target.value)}
             onKeyDown={(e) => e.key === 'Enter' && setPwd(inputPwd)}
             placeholder="請輸入密碼"
-            className="w-full bg-white border-2 border-gray-100 px-6 py-4 rounded-2xl text-center text-xl font-mono tracking-widest focus:border-[#0052CC] focus:outline-none transition-all shadow-sm"
+            className="w-full bg-white border-2 border-gray-100 px-6 py-4 rounded-2xl text-center text-xl font-mono tracking-widest focus:border-[#0052CC] focus:outline-none transition-all shadow-sm placeholder:tracking-normal placeholder:font-sans"
           />
           <button
             onClick={() => setPwd(inputPwd)}
-            className="w-full bg-gray-900 text-white py-4 rounded-2xl font-bold flex items-center justify-center gap-2 hover:bg-black active:scale-[0.98] transition-all shadow-lg"
+            className="w-full bg-gray-900 text-white py-4 rounded-2xl font-bold flex items-center justify-center gap-2 hover:bg-black transition-colors active:scale-95"
           >
             登入並同步 <ChevronRight className="w-5 h-5" />
           </button>
@@ -86,63 +88,42 @@ const App: React.FC = () => {
     );
   }
 
-  // --- 4. 關鍵修復：自定義計算總資產函數 ---
+  // --- 4. 同步與資產更新函數 ---
   const calculateCorrectedTotalWealth = useCallback((accounts: Account[], fds: FixedDeposit[]) => {
     const effectiveFDs = fds.filter(fd => fd.type !== 'Savings');
     return calculateTotalWealthHKD(accounts, effectiveFDs);
   }, []);
 
-  // --- 5. 核心功能：同步至 Google Sheets & Firebase ---
   const triggerCloudSync = async (newState: AppState) => {
     setSyncStatus('syncing');
-    
-    // A. Firebase 即時同步 (確保其他設備立即更新)
     const { firebaseDB, firebaseRef, firebaseSet } = window as any;
+    
+    // 1. Firebase Sync
     if (firebaseDB && firebaseRef && firebaseSet) {
       try {
         const userRef = firebaseRef(firebaseDB, `users/${userPwd}/current_status`);
         await firebaseSet(userRef, newState);
-        console.log("✅ Firebase 寫入成功");
-      } catch (e) {
-        console.error("❌ Firebase 寫入失敗", e);
-      }
+      } catch (e) { console.error("Firebase write error:", e); }
     }
 
-    // B. 發送至 Google Apps Script (多用戶分流紀錄)
+    // 2. Google Script Backup
     try {
-      const scriptUrl = "https://script.google.com/macros/s/AKfycbzxghw8YJtPrE8ft8eGpaZGiHk9K41CkOnKBWxGrfLwHdjwU72ADWuu7cItPFg-FSdhxg/exec";
-      
+      const scriptUrl = "https://script.google.com/macros/s/AKfycbwUMlONXGA-3KqBo69Ml5y9zJS4VhhQBtewBNswG83uxZ6K9mE_zvnAUxlEvG7dOzrF/exec";
       fetch(scriptUrl, {
         method: 'POST',
-        mode: 'no-cors', // 避免跨網域報錯
+        mode: 'no-cors',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
-          userId: userPwd, // 作為 Google Sheet 的分頁名稱
+          userId: userPwd,
           assets: [
-            ...newState.accounts.map(acc => ({ 
-              category: 'CASH', 
-              institution: acc.name, 
-              amount: acc.balance, 
-              currency: acc.currency 
-            })),
-            ...newState.fixedDeposits.map(fd => ({ 
-              category: 'FD', 
-              symbol: fd.bankName, 
-              amount: fd.principal, 
-              currency: fd.currency 
-            }))
+            ...newState.accounts.map(acc => ({ category: 'CASH', institution: acc.name, amount: acc.balance, currency: acc.currency })),
+            ...newState.fixedDeposits.map(fd => ({ category: 'FD', symbol: fd.bankName, amount: fd.principal, currency: fd.currency }))
           ]
         })
-      }).then(() => setSyncStatus('synced'))
-        .catch(() => setSyncStatus('offline'));
-
-    } catch (error) {
-      console.error("同步失敗:", error);
-      setSyncStatus('offline');
-    }
+      }).then(() => setSyncStatus('synced')).catch(() => setSyncStatus('offline'));
+    } catch (error) { setSyncStatus('offline'); }
   };
 
-  // --- 6. 狀態更新封裝器 ---
   const updateStateAndSync = (newState: AppState) => {
     saveStoredData(newState);
     setData(newState);
@@ -155,19 +136,10 @@ const App: React.FC = () => {
     const todayStr = new Date().toISOString().slice(0, 7);
     const newHistory = [...(data.history || [])];
     const existingIndex = newHistory.findIndex(h => h.date === todayStr);
-    
-    if (existingIndex >= 0) {
-      newHistory[existingIndex] = { ...newHistory[existingIndex], totalValueHKD: totalWealth };
-    } else {
-      newHistory.push({ date: todayStr, totalValueHKD: totalWealth });
-    }
+    if (existingIndex >= 0) newHistory[existingIndex] = { ...newHistory[existingIndex], totalValueHKD: totalWealth };
+    else newHistory.push({ date: todayStr, totalValueHKD: totalWealth });
 
-    const newState: AppState = {
-      ...data,
-      accounts: newAccounts,
-      history: newHistory,
-      lastUpdated: new Date().toISOString()
-    };
+    const newState: AppState = { ...data, accounts: newAccounts, history: newHistory, lastUpdated: new Date().toISOString() };
     updateStateAndSync(newState);
     setCurrentView('overview');
   };
@@ -178,46 +150,25 @@ const App: React.FC = () => {
     const todayStr = new Date().toISOString().slice(0, 7);
     const newHistory = [...(data.history || [])];
     const existingIndex = newHistory.findIndex(h => h.date === todayStr);
-    
-    if (existingIndex >= 0) {
-      newHistory[existingIndex] = { ...newHistory[existingIndex], totalValueHKD: totalWealth };
-    } else {
-      newHistory.push({ date: todayStr, totalValueHKD: totalWealth });
-    }
+    if (existingIndex >= 0) newHistory[existingIndex] = { ...newHistory[existingIndex], totalValueHKD: totalWealth };
+    else newHistory.push({ date: todayStr, totalValueHKD: totalWealth });
 
-    const newState = { 
-      ...data, 
-      fixedDeposits: newFDs, 
-      history: newHistory, 
-      lastUpdated: new Date().toISOString() 
-    };
+    const newState = { ...data, fixedDeposits: newFDs, history: newHistory, lastUpdated: new Date().toISOString() };
     updateStateAndSync(newState);
   };
 
   const handleSettleFD = (fdId: string, targetAccountId: string, finalAmount: number) => {
     if (!data) return;
-    const newAccounts = data.accounts.map(acc => 
-      acc.id === targetAccountId ? { ...acc, balance: acc.balance + finalAmount } : acc
-    );
+    const newAccounts = data.accounts.map(acc => acc.id === targetAccountId ? { ...acc, balance: acc.balance + finalAmount } : acc);
     const newFDs = data.fixedDeposits.filter(fd => fd.id !== fdId);
     const totalWealth = calculateCorrectedTotalWealth(newAccounts, newFDs);
     const todayStr = new Date().toISOString().slice(0, 7);
     const newHistory = [...(data.history || [])];
     const existingIndex = newHistory.findIndex(h => h.date === todayStr);
-    
-    if (existingIndex >= 0) {
-      newHistory[existingIndex] = { ...newHistory[existingIndex], totalValueHKD: totalWealth };
-    } else {
-      newHistory.push({ date: todayStr, totalValueHKD: totalWealth });
-    }
+    if (existingIndex >= 0) newHistory[existingIndex] = { ...newHistory[existingIndex], totalValueHKD: totalWealth };
+    else newHistory.push({ date: todayStr, totalValueHKD: totalWealth });
 
-    const newState: AppState = { 
-      ...data, 
-      accounts: newAccounts, 
-      fixedDeposits: newFDs, 
-      history: newHistory, 
-      lastUpdated: new Date().toISOString() 
-    };
+    const newState: AppState = { ...data, accounts: newAccounts, fixedDeposits: newFDs, history: newHistory, lastUpdated: new Date().toISOString() };
     updateStateAndSync(newState);
   };
 
@@ -227,20 +178,28 @@ const App: React.FC = () => {
     updateStateAndSync(newState);
   };
 
-  // 加載中狀態
   if (!data) {
+    // 萬一 lazy init 失敗 (極少見)，提供一個重置按鈕
     return (
-      <div className="flex h-screen flex-col items-center justify-center bg-[#F8F9FA]">
+      <div className="flex h-screen flex-col items-center justify-center bg-[#F8F9FA] p-6 text-center">
         <RefreshCw className="h-10 w-10 animate-spin text-[#0052CC] mb-4" />
-        <div className="text-[#0052CC] font-bold text-lg tracking-tight">同步數據中...</div>
+        <div className="text-[#0052CC] font-bold text-lg mb-4">正在載入數據...</div>
+        <button 
+           onClick={() => {
+             localStorage.removeItem('wealth_snapshot_v1');
+             window.location.reload();
+           }}
+           className="text-xs text-red-400 underline"
+        >
+          如果卡住太久，點此重置數據
+        </button>
       </div>
     );
   }
 
   return (
     <Layout currentView={currentView} onNavigate={setCurrentView}>
-      {/* 頂部同步狀態條 */}
-      <div className="fixed top-0 left-0 right-0 z-50 flex items-center justify-between px-4 py-1.5 bg-white/90 backdrop-blur-md border-b border-gray-100 text-[10px] uppercase tracking-[0.15em] font-black text-gray-400">
+      <div className="fixed top-0 left-0 right-0 z-50 flex items-center justify-between px-4 py-1.5 bg-white/90 backdrop-blur-md border-b border-gray-100 text-[10px] uppercase tracking-[0.15em] font-black text-gray-400 transition-all">
         <div className="flex items-center gap-2">
           <ShieldCheck className="h-3 w-3 text-green-500" />
           <span className="truncate max-w-[80px]">USER: {userPwd}</span>
@@ -252,44 +211,11 @@ const App: React.FC = () => {
         </div>
       </div>
 
-      <div className="pt-8"> 
-        {currentView === 'overview' && (
-          <Overview 
-            key={data.lastUpdated}
-            accounts={data.accounts}
-            fixedDeposits={data.fixedDeposits}
-            lastUpdated={data.lastUpdated}
-            onNavigateToFD={() => setCurrentView('fd-manager')}
-            onNavigateToUpdate={() => setCurrentView('update')}
-          />
-        )}
-        
-        {currentView === 'update' && (
-          <UpdatePage 
-            accounts={data.accounts}
-            onSave={handleUpdateAccounts}
-          />
-        )}
-        
-        {currentView === 'insights' && (
-          <Insights 
-            accounts={data.accounts}
-            fixedDeposits={data.fixedDeposits}
-            history={data.history}
-            wealthGoal={data.wealthGoal || 2000000}
-            onUpdateGoal={handleUpdateGoal}
-          />
-        )}
-
-        {currentView === 'fd-manager' && (
-          <FDManager 
-            fds={data.fixedDeposits} 
-            accounts={data.accounts}
-            onUpdate={handleUpdateFDs}
-            onSettle={handleSettleFD}
-            onBack={() => setCurrentView('overview')}
-          />
-        )}
+      <div className="pt-8 animate-in fade-in duration-300">
+        {currentView === 'overview' && <Overview key={data.lastUpdated} accounts={data.accounts} fixedDeposits={data.fixedDeposits} lastUpdated={data.lastUpdated} onNavigateToFD={() => setCurrentView('fd-manager')} onNavigateToUpdate={() => setCurrentView('update')} />}
+        {currentView === 'update' && <UpdatePage accounts={data.accounts} onSave={handleUpdateAccounts} />}
+        {currentView === 'insights' && <Insights accounts={data.accounts} fixedDeposits={data.fixedDeposits} history={data.history} wealthGoal={data.wealthGoal || 2000000} onUpdateGoal={handleUpdateGoal} />}
+        {currentView === 'fd-manager' && <FDManager fds={data.fixedDeposits} accounts={data.accounts} onUpdate={handleUpdateFDs} onSettle={handleSettleFD} onBack={() => setCurrentView('overview')} />}
       </div>
     </Layout>
   );

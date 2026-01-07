@@ -3,6 +3,7 @@ import ReactDOM from 'react-dom/client';
 import App from './App';
 
 // --- 1. 定義 Firebase 資料的 Context ---
+// 確保導出 SyncContext 供 App.tsx 使用
 export const SyncContext = createContext<{
   data: any;
   userPwd: string | null;
@@ -10,54 +11,65 @@ export const SyncContext = createContext<{
 }>({ data: null, userPwd: null, setPwd: () => {} });
 
 const RootProvider = ({ children }: { children: React.ReactNode }) => {
-  const [data, setData] = useState(null);
+  const [data, setData] = useState<any>(null);
   const [userPwd, setUserPwd] = useState<string | null>(localStorage.getItem('wealth_pwd'));
 
   useEffect(() => {
     let unsubscribe: (() => void) | null = null;
-    let retryTimer: number | null = null;
+    let retryInterval: any = null;
 
     const setupSync = () => {
-      // 從 window 取得 HTML 注入的實例
+      // 1. 從 window 取得 index.html 注入的實例
       const { firebaseDB, firebaseRef, firebaseOnValue } = window as any;
 
-      // 檢查 Firebase 是否真的準備好了
+      // 2. 檢查 Firebase 是否準備就緒且已輸入密碼
       if (userPwd && firebaseDB && firebaseOnValue && firebaseRef) {
+        // 如果已經在重試，清除定時器
+        if (retryInterval) {
+          clearInterval(retryInterval);
+          retryInterval = null;
+        }
+
         try {
+          // 修正路徑確保正確指向用戶資料夾
           const statusRef = firebaseRef(firebaseDB, `users/${userPwd}/current_status`);
+          
+          console.log(`📡 正在嘗試監聽 Firebase 路徑: users/${userPwd}/current_status`);
           
           unsubscribe = firebaseOnValue(statusRef, (snapshot: any) => {
             const val = snapshot.val();
-            if (val) {
-              console.log("✅ Firebase 同步成功，收到數據:", val);
-              setData(val);
-            }
+            // 關鍵修正：即使 val 是 null (新用戶)，也要執行 setData
+            // 這樣 App.tsx 才知道同步檢查已經完成
+            console.log("✅ Firebase 同步回傳:", val ? "找到數據" : "全新用戶(無數據)");
+            setData(val || { _isNewUser: true }); 
+          }, (error: any) => {
+            console.error("❌ Firebase 讀取權限錯誤:", error);
           });
-          
-          if (retryTimer) clearInterval(retryTimer);
-          console.log("📡 監聽器已掛載至路徑:", `users/${userPwd}/current_status`);
+
         } catch (err) {
-          console.error("❌ 設置監聽器時發生錯誤:", err);
+          console.error("❌ 設置監聽器失敗:", err);
         }
-      } else {
-        // 如果 Firebase 還沒準備好，每 500ms 檢查一次 (最多重試，直到成功)
-        if (!retryTimer) {
-          console.warn("⏳ Firebase 尚未就緒，正在等待初始化...");
-          retryTimer = window.setInterval(setupSync, 500);
-        }
+      } else if (userPwd && !retryInterval) {
+        // 如果有密碼但 Firebase 還沒 Ready，每 500ms 檢查一次
+        console.warn("⏳ Firebase 實例尚未就緒，500ms 後重試...");
+        retryInterval = setInterval(setupSync, 500);
       }
     };
 
     setupSync();
 
-    // 清理函數：卸載時清除監聽器和定時器
+    // 清理函數
     return () => {
-      if (unsubscribe) unsubscribe();
-      if (retryTimer) clearInterval(retryTimer);
+      if (unsubscribe) {
+        console.log("🔌 正在卸載 Firebase 監聽器");
+        unsubscribe();
+      }
+      if (retryInterval) clearInterval(retryInterval);
     };
   }, [userPwd]);
 
   const setPwd = (pwd: string) => {
+    console.log("🔐 設定新密碼:", pwd);
     localStorage.setItem('wealth_pwd', pwd);
     setUserPwd(pwd);
   };
@@ -69,10 +81,10 @@ const RootProvider = ({ children }: { children: React.ReactNode }) => {
   );
 };
 
-// --- 2. 標準 React 19 掛載 (保持原樣且不簡化) ---
+// --- 2. 標準 React 19 掛載 ---
 const rootElement = document.getElementById('root');
 if (!rootElement) {
-  throw new Error("Could not find root element to mount to");
+  throw new Error("找不到 root 節點，請檢查 index.html 是否包含 <div id='root'></div>");
 }
 
 const root = ReactDOM.createRoot(rootElement);

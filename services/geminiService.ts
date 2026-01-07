@@ -1,4 +1,4 @@
-import { GoogleGenAI } from "@google/genai";
+import { GoogleGenAI, GenerateContentResponse } from "@google/genai";
 
 // 取得 API Key
 const getApiKey = (): string | undefined => {
@@ -62,7 +62,7 @@ export const parseFinancialStatement = async (base64Data: string): Promise<Scann
   }
 
   try {
-    // 💡 修正：使用 'gemini-flash-latest' 以獲得更穩定的 Quota 限制 (避免使用 Experimental 模型導致 429)
+    // 💡 修正：使用 'gemini-3-flash-preview' 以獲得更穩定的 Quota 限制 (避免使用 Experimental 模型導致 429)
     const prompt = `
       Instructions:
       1. Analyze the attached financial statement image.
@@ -77,8 +77,8 @@ export const parseFinancialStatement = async (base64Data: string): Promise<Scann
       Return ONLY a JSON array.
     `;
 
-    const response = await runWithRetry(() => ai.models.generateContent({
-      model: 'gemini-flash-latest', 
+    const response = await runWithRetry<GenerateContentResponse>(() => ai.models.generateContent({
+      model: 'gemini-3-flash-preview', 
       contents: {
         parts: [
           {
