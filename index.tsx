@@ -72,4 +72,14 @@ const RootProvider = ({ children }: { children: React.ReactNode }) => {
 // --- 2. 標準 React 19 掛載 (保持原樣且不簡化) ---
 const rootElement = document.getElementById('root');
 if (!rootElement) {
-  throw new Error("
+  throw new Error("Could not find root element to mount to");
+}
+
+const root = ReactDOM.createRoot(rootElement);
+root.render(
+  <React.StrictMode>
+    <RootProvider>
+      <App />
+    </RootProvider>
+  </React.StrictMode>
+);
