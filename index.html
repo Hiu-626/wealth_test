@@ -30,8 +30,8 @@
         "recharts": "https://esm.sh/recharts@^3.6.0",
         "html2canvas": "https://esm.sh/html2canvas@^1.4.1",
         "@google/generative-ai": "https://esm.sh/@google/generative-ai@^0.24.1",
-        "firebase/app": "https://www.gstatic.com/firebasejs/10.8.0/firebase-app.js",
-        "firebase/database": "https://www.gstatic.com/firebasejs/10.8.0/firebase-database.js"
+        "firebase/app": "https://esm.sh/firebase@10.8.0/app",
+        "firebase/database": "https://esm.sh/firebase@10.8.0/database"
       }
     }
     </script>
@@ -40,32 +40,34 @@
     <div id="root"></div>
 
     <script type="module">
-      import { initializeApp } from "firebase/app";
-      import { getDatabase, ref, onValue } from "firebase/database";
+      import { initializeApp } from "https://esm.sh/firebase@10.8.0/app";
+      import { getDatabase, ref, onValue } from "https://esm.sh/firebase@10.8.0/database";
 
-      // 這裡填入你的 Firebase 資訊
       const firebaseConfig = {
-  apiKey: "AIzaSyCNA78fMaTHLgsEXXlwcP69adYkJHiRIto",
-  authDomain: "wealthsnapshot-83a02.firebaseapp.com",
-  projectId: "wealthsnapshot-83a02",
-  databaseURL: "https://wealthsnapshot-83a02-default-rtdb.firebaseio.com/",
-  storageBucket: "wealthsnapshot-83a02.firebasestorage.app",
-  messagingSenderId: "502459487916",
-  appId: "1:502459487916:web:3536db19bead0b5c4fb109",
-  measurementId: "G-0C2PVZ5NXS"
-};
-
+        apiKey: "AIzaSyCNA78fMaTHLgsEXXlwcP69adYkJHiRIto",
+        authDomain: "wealthsnapshot-83a02.firebaseapp.com",
+        projectId: "wealthsnapshot-83a02",
+        databaseURL: "https://wealthsnapshot-83a02-default-rtdb.firebaseio.com/",
+        storageBucket: "wealthsnapshot-83a02.firebasestorage.app",
+        messagingSenderId: "502459487916",
+        appId: "1:502459487916:web:3536db19bead0b5c4fb109",
+        measurementId: "G-0C2PVZ5NXS"
+      };
 
       // 初始化 Firebase
-      const app = initializeApp(firebaseConfig);
-      const db = getDatabase(app);
+      try {
+        const app = initializeApp(firebaseConfig);
+        const db = getDatabase(app);
 
-      // 將 Firebase 實例掛載到 window，方便 index.tsx 裡的 React 組件使用
-      window.firebaseDB = db;
-      window.firebaseRef = ref;
-      window.firebaseOnValue = onValue;
+        // 掛載到 window 供 index.tsx 使用
+        window.firebaseDB = db;
+        window.firebaseRef = ref;
+        window.firebaseOnValue = onValue;
 
-      console.log("WealthSnapshot: Firebase Sync 模組已就緒");
+        console.log("WealthSnapshot: Firebase Sync 模組已就緒");
+      } catch (e) {
+        console.error("Firebase 初始化失敗:", e);
+      }
     </script>
 
     <script type="module" src="/index.tsx"></script>
